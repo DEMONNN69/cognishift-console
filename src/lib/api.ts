@@ -6,6 +6,7 @@ import type {
   DecisionLookupRequest, DecisionLookupResponse,
   LogInteractionRequest, LogInteractionResponse,
   SetModeRequest, SetModeResponse,
+  CreateUserRequest,
   NotificationEvent,
 } from "@/types/api";
 
@@ -74,6 +75,16 @@ export const api = {
     postJson<DecisionLookupResponse>("/decision/", body),
   logInteraction: (body: LogInteractionRequest) =>
     postJson<LogInteractionResponse>("/interactions/", body),
+
+  // --- User management ---
+  createUser: (body: CreateUserRequest) =>
+    postJson<User>("/users/", body),
+
+  // --- OTP auth ---
+  sendOtp: (body: { phone: string }) =>
+    postJson<{ sent: boolean }>("/auth/send-otp/", body),
+  verifyOtp: (body: { phone: string; otp: string }) =>
+    postJson<{ verified: boolean; user_exists: boolean; user_id: string | null }>("/auth/verify-otp/", body),
 
   // --- User-scoped endpoints ---
   setMode: (userId: string, body: SetModeRequest) =>

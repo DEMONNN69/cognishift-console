@@ -9,6 +9,7 @@ import type { User, SourceApp, ManualMode, GenerateEventResponse, DetectModeResp
 const SOURCE_APPS: SourceApp[] = ["slack", "gmail", "github", "calendar", "youtube"];
 const MANUAL_MODES: ManualMode[] = ["auto", "focus", "work", "meeting", "relax", "sleep"];
 
+
 function UserExpandedPanel({ user }: { user: User }) {
   const [source, setSource] = useState<SourceApp>("github");
   const [message, setMessage] = useState("");

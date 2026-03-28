@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { useHealthCheck } from "@/hooks/use-api";
 import { getApiBaseUrl, setApiBaseUrl } from "@/lib/api";
 import { DashboardView } from "@/components/views/DashboardView";
@@ -57,6 +58,12 @@ const Index = () => {
             <span className={`text-[8px] leading-none ${isHealthy ? "text-status-send" : "text-status-block"}`}>●</span>
             {isHealthy ? "Connected" : "Disconnected"}
           </span>
+          <Link
+            to="/register"
+            className="h-6 px-3 border border-border rounded-sm text-xs hover:bg-secondary transition-colors font-mono flex items-center"
+          >
+            + New User
+          </Link>
         </div>
       </div>
 

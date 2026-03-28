@@ -159,3 +159,11 @@ export interface SetModeResponse {
   mode: ManualMode;
   drained: GenerateEventResponse[];
 }
+
+export interface CreateUserRequest {
+  name: string;
+  role: Role;
+  persona_description: string;
+  notification_pref: NotificationPref;
+  phone_no?: string;
+}

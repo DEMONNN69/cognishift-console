@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import type { ManualMode } from "@/types/api";
+import type { ManualMode, CreateUserRequest } from "@/types/api";
 
 export function useUsers(enabled = true, refetchInterval?: number) {
   return useQuery({
@@ -83,10 +83,30 @@ export function useUserQueue(userId: string, enabled = false) {
   });
 }
 
+export function useCreateUser() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: CreateUserRequest) => api.createUser(body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["users"] });
+    },
+  });
+}
+
 export function useUserNotifications(userId: string, status?: string) {
   return useQuery({
     queryKey: ["notifications", userId, status],
     queryFn: () => api.getUserNotifications(userId, status),
     enabled: !!userId,
+  });
+}
+
+export function useSendOtp() {
+  return useMutation({ mutationFn: (body: { phone: string }) => api.sendOtp(body) });
+}
+
+export function useVerifyOtp() {
+  return useMutation({
+    mutationFn: (body: { phone: string; otp: string }) => api.verifyOtp(body),
   });
 }
