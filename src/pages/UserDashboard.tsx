@@ -1,9 +1,11 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef, useLayoutEffect } from "react"
+import gsap from "gsap"
 import { useNavigate } from "react-router-dom"
 import { cn } from "@/lib/utils"
 import PillNav from "@/components/PillNav"
+import MagicBento, { MagicBentoItem } from "@/components/MagicBento"
 import { auth } from "@/lib/auth"
 import { useUsers, useUserNotifications, useSetMode, useTelegramLink } from "@/hooks/use-api"
 import type { ManualMode } from "@/types/api"
@@ -27,13 +29,13 @@ const MODE_COLORS: Record<ManualMode, string> = {
   sleep:   "text-slate-400",
 }
 
-const MODES: { value: ManualMode; label: string; description: string }[] = [
-  { value: "auto",    label: "Auto",    description: "AI decides" },
-  { value: "focus",   label: "Focus",   description: "Deep work" },
-  { value: "work",    label: "Work",    description: "Office" },
-  { value: "meeting", label: "Meeting", description: "In a call" },
-  { value: "relax",   label: "Relax",   description: "Free time" },
-  { value: "sleep",   label: "Sleep",   description: "Do not disturb" },
+const MODES: { value: ManualMode; label: string; description: string; icon: string; glow: string; ring: string; bg: string; text: string }[] = [
+  { value: "auto",    label: "Auto",    description: "AI infers from context",   icon: "✦", glow: "rgba(96,165,250,0.35)",  ring: "border-blue-400/60",   bg: "bg-blue-400/10",   text: "text-blue-400"   },
+  { value: "focus",   label: "Focus",   description: "Deep work, zero noise",    icon: "◎", glow: "rgba(167,139,250,0.35)", ring: "border-purple-400/60", bg: "bg-purple-400/10", text: "text-purple-400" },
+  { value: "work",    label: "Work",    description: "General office activity",  icon: "⬡", glow: "rgba(74,222,128,0.35)",  ring: "border-green-400/60",  bg: "bg-green-400/10",  text: "text-green-400"  },
+  { value: "meeting", label: "Meeting", description: "In a call or standup",     icon: "⬤", glow: "rgba(250,204,21,0.35)",  ring: "border-yellow-400/60", bg: "bg-yellow-400/10", text: "text-yellow-400" },
+  { value: "relax",   label: "Relax",   description: "Free time, show all",      icon: "◇", glow: "rgba(56,189,248,0.35)",  ring: "border-sky-400/60",    bg: "bg-sky-400/10",    text: "text-sky-400"    },
+  { value: "sleep",   label: "Sleep",   description: "Do not disturb",           icon: "◐", glow: "rgba(148,163,184,0.35)", ring: "border-slate-400/60",  bg: "bg-slate-400/10",  text: "text-slate-400"  },
 ]
 
 const SOURCE_ICONS: Record<string, string> = {
@@ -71,6 +73,102 @@ function NotifList({
   )
 }
 
+// ─── Mode Switcher ────────────────────────────────────────────────────────────
+
+function ModeSwitcher({
+  current,
+  onSelect,
+  disabled,
+}: {
+  current: ManualMode
+  onSelect: (mode: ManualMode) => void
+  disabled: boolean
+}) {
+  const cardRefs = useRef<(HTMLButtonElement | null)[]>([])
+
+  // Animate newly selected card: glow pulse + scale pop
+  useLayoutEffect(() => {
+    const idx = MODES.findIndex((m) => m.value === current)
+    const el = cardRefs.current[idx]
+    if (!el) return
+    gsap.fromTo(
+      el,
+      { scale: 0.94, opacity: 0.7 },
+      { scale: 1, opacity: 1, duration: 0.35, ease: "back.out(1.8)" },
+    )
+  }, [current])
+
+  function handleHover(idx: number, entering: boolean) {
+    const el = cardRefs.current[idx]
+    if (!el) return
+    const isCurrent = MODES[idx].value === current
+    gsap.to(el, {
+      scale: entering ? (isCurrent ? 1.04 : 1.06) : 1,
+      duration: 0.2,
+      ease: "power2.out",
+    })
+  }
+
+  function handleClick(mode: ManualMode, idx: number) {
+    if (disabled || mode === current) return
+    const el = cardRefs.current[idx]
+    if (el) {
+      gsap.timeline()
+        .to(el, { scale: 0.92, duration: 0.1, ease: "power2.in" })
+        .to(el, { scale: 1.05, duration: 0.2, ease: "back.out(2)" })
+        .to(el, { scale: 1,    duration: 0.15, ease: "power2.out" })
+    }
+    onSelect(mode)
+  }
+
+  return (
+    <div className="rounded-xl border border-border bg-card p-4">
+      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-3">Mode</p>
+      <div className="grid grid-cols-3 gap-2.5">
+        {MODES.map((m, idx) => {
+          const isActive = m.value === current
+          return (
+            <button
+              key={m.value}
+              ref={(el) => { cardRefs.current[idx] = el }}
+              disabled={disabled}
+              onClick={() => handleClick(m.value, idx)}
+              onMouseEnter={() => handleHover(idx, true)}
+              onMouseLeave={() => handleHover(idx, false)}
+              className={cn(
+                "relative flex flex-col items-center justify-center gap-1.5 rounded-xl border py-3.5 px-2 transition-colors duration-200",
+                "disabled:cursor-not-allowed",
+                isActive
+                  ? cn("border-2", m.ring, m.bg)
+                  : "border-border bg-transparent hover:bg-white/5",
+              )}
+              style={isActive ? { boxShadow: `0 0 18px 2px ${m.glow}, 0 0 6px 1px ${m.glow}` } : undefined}
+            >
+              {/* Active indicator dot */}
+              {isActive && (
+                <span
+                  className="absolute top-2 right-2 w-1.5 h-1.5 rounded-full animate-pulse"
+                  style={{ backgroundColor: m.glow.replace("0.35", "0.9") }}
+                />
+              )}
+
+              <span className={cn("text-xl leading-none select-none", isActive ? m.text : "text-muted-foreground")}>
+                {m.icon}
+              </span>
+              <span className={cn("text-[11px] font-semibold", isActive ? m.text : "text-foreground")}>
+                {m.label}
+              </span>
+              <span className="text-[9px] text-muted-foreground text-center leading-tight px-0.5">
+                {m.description}
+              </span>
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 // ─── Home tab ─────────────────────────────────────────────────────────────────
 
 function HomeTab({ userId }: { userId: string }) {
@@ -92,110 +190,105 @@ function HomeTab({ userId }: { userId: string }) {
   }
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6 py-8 px-4">
-
-      {/* Welcome + mode badge */}
-      <div className="rounded-xl border border-border bg-card p-6 flex items-start justify-between gap-4">
-        <div className="space-y-0.5">
-          <p className="text-xs text-muted-foreground uppercase tracking-wide">Welcome back</p>
-          <h2 className="text-2xl font-semibold tracking-tight">{user.name}</h2>
-          <p className="text-xs text-muted-foreground capitalize">{user.role}</p>
-        </div>
-        <span className={cn("text-xs font-semibold capitalize px-3 py-1 rounded-full border mt-1", {
-          "border-blue-500/30 bg-blue-500/10 text-blue-400":     user.manual_mode === "auto",
-          "border-purple-500/30 bg-purple-500/10 text-purple-400": user.manual_mode === "focus",
-          "border-green-500/30 bg-green-500/10 text-green-400":   user.manual_mode === "work",
-          "border-yellow-500/30 bg-yellow-500/10 text-yellow-400": user.manual_mode === "meeting",
-          "border-sky-500/30 bg-sky-500/10 text-sky-400":         user.manual_mode === "relax",
-          "border-slate-500/30 bg-slate-500/10 text-slate-400":   user.manual_mode === "sleep",
-        })}>
-          {user.manual_mode}
-        </span>
-      </div>
-
-      {/* Stats row */}
-      <div className="grid grid-cols-3 gap-3">
-        {[
-          { label: "Delivered", value: delivered.length, color: "text-green-400",  bg: "bg-green-400/10"  },
-          { label: "Queued",    value: queued.length,    color: "text-yellow-400", bg: "bg-yellow-400/10" },
-          { label: "Blocked",   value: blocked.length,   color: "text-red-400",    bg: "bg-red-400/10"    },
-        ].map(({ label, value, color, bg }) => (
-          <div key={label} className={cn("rounded-xl border border-border p-4 text-center", bg)}>
-            <div className={cn("text-2xl font-semibold", color)}>{value}</div>
-            <div className="text-[11px] text-muted-foreground mt-1">{label}</div>
+    <div className="max-w-6xl mx-auto py-8 px-4 md:px-6">
+      <MagicBento
+        textAutoHide={true}
+        enableStars
+        enableSpotlight
+        enableBorderGlow={true}
+        enableTilt={false}
+        enableMagnetism={false}
+        clickEffect
+        spotlightRadius={400}
+        particleCount={12}
+        glowColor="132, 0, 255"
+        disableAnimations={false}
+      >
+        <MagicBentoItem className="md:col-span-4">
+          <div className="p-6 flex items-start justify-between gap-4">
+            <div className="space-y-0.5">
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">Welcome back</p>
+              <h2 className="text-2xl font-semibold tracking-tight">{user.name}</h2>
+              <p className="text-xs text-muted-foreground capitalize">{user.role}</p>
+            </div>
+            <span className={cn("text-xs font-semibold capitalize px-3 py-1 rounded-full border mt-1", {
+              "border-blue-500/30 bg-blue-500/10 text-blue-400": user.manual_mode === "auto",
+              "border-purple-500/30 bg-purple-500/10 text-purple-400": user.manual_mode === "focus",
+              "border-green-500/30 bg-green-500/10 text-green-400": user.manual_mode === "work",
+              "border-yellow-500/30 bg-yellow-500/10 text-yellow-400": user.manual_mode === "meeting",
+              "border-sky-500/30 bg-sky-500/10 text-sky-400": user.manual_mode === "relax",
+              "border-slate-500/30 bg-slate-500/10 text-slate-400": user.manual_mode === "sleep",
+            })}>
+              {user.manual_mode}
+            </span>
           </div>
+        </MagicBentoItem>
+
+        {[
+          { label: "Delivered", value: delivered.length, color: "text-green-400", bg: "bg-green-400/10" },
+          { label: "Queued", value: queued.length, color: "text-yellow-400", bg: "bg-yellow-400/10" },
+          { label: "Blocked", value: blocked.length, color: "text-red-400", bg: "bg-red-400/10" },
+        ].map(({ label, value, color, bg }) => (
+          <MagicBentoItem key={label} className="md:col-span-2">
+            <div className={cn("h-full p-4 text-center flex flex-col justify-center", bg)}>
+              <div className={cn("text-2xl font-semibold", color)}>{value}</div>
+              <div className="text-[11px] text-muted-foreground mt-1">{label}</div>
+            </div>
+          </MagicBentoItem>
         ))}
-      </div>
 
-      {/* Mode switcher */}
-      <div className="rounded-xl border border-border bg-card p-5 space-y-3">
-        <p className="text-xs font-medium text-foreground">Switch mode</p>
-        <div className="grid grid-cols-3 gap-2">
-          {MODES.map((m) => (
-            <button
-              key={m.value}
-              type="button"
-              onClick={() => handleMode(m.value)}
-              disabled={setMode.isPending}
-              className={cn(
-                "p-2.5 rounded-lg border text-xs text-left transition-all",
-                user.manual_mode === m.value
-                  ? "border-foreground bg-foreground/5"
-                  : "border-border bg-background text-muted-foreground hover:border-foreground/30 hover:text-foreground"
-              )}
-            >
-              <div className={cn("font-semibold mb-0.5", MODE_COLORS[m.value])}>{m.label}</div>
-              <div className="text-[10px] text-muted-foreground leading-tight">{m.description}</div>
-            </button>
-          ))}
-        </div>
-      </div>
+        <MagicBentoItem className="md:col-span-6">
+          <ModeSwitcher current={user.manual_mode} onSelect={handleMode} disabled={setMode.isPending} />
+        </MagicBentoItem>
 
-      {/* Queued notifications */}
-      <div className="rounded-xl border border-yellow-500/20 bg-card overflow-hidden">
-        <div className="px-5 py-3.5 border-b border-border flex items-center justify-between">
-          <p className="text-xs font-medium text-foreground">Queued</p>
-          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-yellow-400/10 text-yellow-400 border border-yellow-400/20">
-            {queued.length}
-          </span>
-        </div>
-        <NotifList
-          items={queued}
-          emptyText="No queued notifications — all clear."
-          accent="bg-yellow-400"
-        />
-      </div>
+        <MagicBentoItem className="md:col-span-3 border-yellow-500/20">
+          <div className="overflow-hidden">
+            <div className="px-5 py-3.5 border-b border-border flex items-center justify-between">
+              <p className="text-xs font-medium text-foreground">Queued</p>
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-yellow-400/10 text-yellow-400 border border-yellow-400/20">
+                {queued.length}
+              </span>
+            </div>
+            <NotifList
+              items={queued}
+              emptyText="No queued notifications — all clear."
+              accent="bg-yellow-400"
+            />
+          </div>
+        </MagicBentoItem>
 
-      {/* Blocked notifications */}
-      <div className="rounded-xl border border-red-500/20 bg-card overflow-hidden">
-        <div className="px-5 py-3.5 border-b border-border flex items-center justify-between">
-          <p className="text-xs font-medium text-foreground">Blocked by AI</p>
-          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-red-400/10 text-red-400 border border-red-400/20">
-            {blocked.length}
-          </span>
-        </div>
-        <NotifList
-          items={blocked}
-          emptyText="Nothing blocked yet."
-          accent="bg-red-400"
-        />
-      </div>
+        <MagicBentoItem className="md:col-span-3 border-red-500/20">
+          <div className="overflow-hidden">
+            <div className="px-5 py-3.5 border-b border-border flex items-center justify-between">
+              <p className="text-xs font-medium text-foreground">Blocked by AI</p>
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-red-400/10 text-red-400 border border-red-400/20">
+                {blocked.length}
+              </span>
+            </div>
+            <NotifList
+              items={blocked}
+              emptyText="Nothing blocked yet."
+              accent="bg-red-400"
+            />
+          </div>
+        </MagicBentoItem>
 
-      {/* Recently delivered */}
-      <div className="rounded-xl border border-green-500/20 bg-card overflow-hidden">
-        <div className="px-5 py-3.5 border-b border-border flex items-center justify-between">
-          <p className="text-xs font-medium text-foreground">Recently delivered</p>
-          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-green-400/10 text-green-400 border border-green-400/20">
-            {delivered.length}
-          </span>
-        </div>
-        <NotifList
-          items={delivered.slice(0, 8)}
-          emptyText="No delivered notifications yet."
-          accent="bg-green-400"
-        />
-      </div>
-
+        <MagicBentoItem className="md:col-span-6 border-green-500/20">
+          <div className="overflow-hidden">
+            <div className="px-5 py-3.5 border-b border-border flex items-center justify-between">
+              <p className="text-xs font-medium text-foreground">Recently delivered</p>
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-green-400/10 text-green-400 border border-green-400/20">
+                {delivered.length}
+              </span>
+            </div>
+            <NotifList
+              items={delivered.slice(0, 8)}
+              emptyText="No delivered notifications yet."
+              accent="bg-green-400"
+            />
+          </div>
+        </MagicBentoItem>
+      </MagicBento>
     </div>
   )
 }
@@ -526,117 +619,107 @@ function DashboardTab({ userId }: { userId: string }) {
   }
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6 py-8 px-4">
+    <div className="max-w-6xl mx-auto py-8 px-4 md:px-6">
+      <MagicBento
+        textAutoHide={true}
+        enableStars
+        enableSpotlight
+        enableBorderGlow={true}
+        enableTilt={false}
+        enableMagnetism={false}
+        clickEffect
+        spotlightRadius={400}
+        particleCount={12}
+        glowColor="132, 0, 255"
+        disableAnimations={false}
+      >
+        {[
+          { label: "Time saved", value: timeSavedLabel, tone: "text-green-400", note: `from ${blocked + queued} interruptions avoided` },
+          { label: "Useless notifications blocked", value: blocked, tone: "text-red-400", note: `${blockRate}% of all incoming filtered out` },
+          { label: "Focus sessions protected", value: focusProtected, tone: "text-purple-400", note: "estimated deep-work blocks kept intact" },
+          { label: "High-priority blocked", value: highBlocked, tone: "text-orange-400", note: "urgent alerts suppressed by AI context" },
+          { label: "Delivery rate", value: `${deliveryRate}%`, tone: "text-blue-400", note: `${delivered} of ${total} notifications sent through` },
+          { label: "Waiting in queue", value: queued, tone: "text-yellow-400", note: "held - will deliver when mode allows" },
+        ].map((card) => (
+          <MagicBentoItem key={card.label} className="md:col-span-2">
+            <div className="p-5 space-y-1 h-full">
+              <p className="text-[11px] text-muted-foreground uppercase tracking-wide">{card.label}</p>
+              <p className={cn("text-3xl font-semibold tabular-nums", card.tone)}>{card.value}</p>
+              <p className="text-[11px] text-muted-foreground">{card.note}</p>
+            </div>
+          </MagicBentoItem>
+        ))}
 
-      {/* Impact KPI cards */}
-      <div className="grid grid-cols-2 gap-3">
-        <div className="rounded-xl border border-border bg-card p-5 space-y-1">
-          <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Time saved</p>
-          <p className="text-3xl font-semibold tabular-nums text-green-400">{timeSavedLabel}</p>
-          <p className="text-[11px] text-muted-foreground">from {blocked + queued} interruptions avoided</p>
-        </div>
+        <MagicBentoItem className="md:col-span-3">
+          <div className="p-5">
+            <p className="text-xs font-medium text-foreground mb-4">Decision distribution</p>
+            <ResponsiveContainer width="100%" height={200}>
+              <PieChart>
+                <Pie data={decisionData} cx="50%" cy="50%" innerRadius={55} outerRadius={80}
+                  paddingAngle={3} dataKey="value">
+                  {decisionData.map((d) => <Cell key={d.name} fill={d.fill} />)}
+                </Pie>
+                <Tooltip {...CHART_TOOLTIP_STYLE} />
+                <Legend iconType="circle" iconSize={8}
+                  formatter={(v) => <span style={{ fontSize: 11, color: "hsl(var(--foreground))" }}>{v}</span>} />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </MagicBentoItem>
 
-        <div className="rounded-xl border border-border bg-card p-5 space-y-1">
-          <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Useless notifications blocked</p>
-          <p className="text-3xl font-semibold tabular-nums text-red-400">{blocked}</p>
-          <p className="text-[11px] text-muted-foreground">{blockRate}% of all incoming filtered out</p>
-        </div>
+        <MagicBentoItem className="md:col-span-3">
+          <div className="p-5">
+            <p className="text-xs font-medium text-foreground mb-4">Delivery vs block rate</p>
+            <ResponsiveContainer width="100%" height={200}>
+              <RadialBarChart cx="50%" cy="50%" innerRadius={30} outerRadius={90}
+                data={radialData} startAngle={90} endAngle={-270}>
+                <RadialBar dataKey="value" cornerRadius={6} label={{ position: "insideStart", fill: "#fff", fontSize: 10 }} />
+                <Legend iconType="circle" iconSize={8}
+                  formatter={(v) => <span style={{ fontSize: 11, color: "hsl(var(--foreground))" }}>{v}</span>} />
+                <Tooltip {...CHART_TOOLTIP_STYLE} formatter={(v) => `${v}%`} />
+              </RadialBarChart>
+            </ResponsiveContainer>
+          </div>
+        </MagicBentoItem>
 
-        <div className="rounded-xl border border-border bg-card p-5 space-y-1">
-          <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Focus sessions protected</p>
-          <p className="text-3xl font-semibold tabular-nums text-purple-400">{focusProtected}</p>
-          <p className="text-[11px] text-muted-foreground">estimated deep-work blocks kept intact</p>
-        </div>
+        {sourceData.length > 0 && (
+          <MagicBentoItem className="md:col-span-6">
+            <div className="p-5">
+              <p className="text-xs font-medium text-foreground mb-4">Notifications by source</p>
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={sourceData} margin={{ top: 0, right: 8, left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} allowDecimals={false} />
+                  <Tooltip {...CHART_TOOLTIP_STYLE} />
+                  <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                    {sourceData.map((_, i) => <Cell key={i} fill={SOURCE_PALETTE[i % SOURCE_PALETTE.length]} />)}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </MagicBentoItem>
+        )}
 
-        <div className="rounded-xl border border-border bg-card p-5 space-y-1">
-          <p className="text-[11px] text-muted-foreground uppercase tracking-wide">High-priority blocked</p>
-          <p className="text-3xl font-semibold tabular-nums text-orange-400">{highBlocked}</p>
-          <p className="text-[11px] text-muted-foreground">urgent alerts suppressed by AI context</p>
-        </div>
-
-        <div className="rounded-xl border border-border bg-card p-5 space-y-1">
-          <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Delivery rate</p>
-          <p className="text-3xl font-semibold tabular-nums text-blue-400">{deliveryRate}%</p>
-          <p className="text-[11px] text-muted-foreground">{delivered} of {total} notifications sent through</p>
-        </div>
-
-        <div className="rounded-xl border border-border bg-card p-5 space-y-1">
-          <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Waiting in queue</p>
-          <p className="text-3xl font-semibold tabular-nums text-yellow-400">{queued}</p>
-          <p className="text-[11px] text-muted-foreground">held — will deliver when mode allows</p>
-        </div>
-      </div>
-
-      {/* Row: Donut + Radial */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-
-        {/* Decision distribution donut */}
-        <div className="rounded-xl border border-border bg-card p-5">
-          <p className="text-xs font-medium text-foreground mb-4">Decision distribution</p>
-          <ResponsiveContainer width="100%" height={200}>
-            <PieChart>
-              <Pie data={decisionData} cx="50%" cy="50%" innerRadius={55} outerRadius={80}
-                paddingAngle={3} dataKey="value">
-                {decisionData.map((d) => <Cell key={d.name} fill={d.fill} />)}
-              </Pie>
-              <Tooltip {...CHART_TOOLTIP_STYLE} />
-              <Legend iconType="circle" iconSize={8}
-                formatter={(v) => <span style={{ fontSize: 11, color: "hsl(var(--foreground))" }}>{v}</span>} />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* Delivery vs block radial */}
-        <div className="rounded-xl border border-border bg-card p-5">
-          <p className="text-xs font-medium text-foreground mb-4">Delivery vs block rate</p>
-          <ResponsiveContainer width="100%" height={200}>
-            <RadialBarChart cx="50%" cy="50%" innerRadius={30} outerRadius={90}
-              data={radialData} startAngle={90} endAngle={-270}>
-              <RadialBar dataKey="value" cornerRadius={6} label={{ position: "insideStart", fill: "#fff", fontSize: 10 }} />
-              <Legend iconType="circle" iconSize={8}
-                formatter={(v) => <span style={{ fontSize: 11, color: "hsl(var(--foreground))" }}>{v}</span>} />
-              <Tooltip {...CHART_TOOLTIP_STYLE} formatter={(v) => `${v}%`} />
-            </RadialBarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      {/* Notifications by source bar */}
-      {sourceData.length > 0 && (
-        <div className="rounded-xl border border-border bg-card p-5">
-          <p className="text-xs font-medium text-foreground mb-4">Notifications by source</p>
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={sourceData} margin={{ top: 0, right: 8, left: -20, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-              <XAxis dataKey="name" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} allowDecimals={false} />
-              <Tooltip {...CHART_TOOLTIP_STYLE} />
-              <Bar dataKey="count" radius={[4, 4, 0, 0]}>
-                {sourceData.map((_, i) => <Cell key={i} fill={SOURCE_PALETTE[i % SOURCE_PALETTE.length]} />)}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      )}
-
-      {/* Priority breakdown bar */}
-      <div className="rounded-xl border border-border bg-card p-5">
-        <p className="text-xs font-medium text-foreground mb-4">Priority breakdown</p>
-        <ResponsiveContainer width="100%" height={160}>
-          <BarChart data={priorityData} layout="vertical" margin={{ top: 0, right: 24, left: 12, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" horizontal={false} />
-            <XAxis type="number" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} allowDecimals={false} />
-            <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} width={52} />
-            <Tooltip {...CHART_TOOLTIP_STYLE} />
-            <Bar dataKey="count" radius={[0, 4, 4, 0]}>
-              {priorityData.map((d) => (
-                <Cell key={d.name} fill={PRIORITY_PALETTE[d.name as keyof typeof PRIORITY_PALETTE] ?? "#94a3b8"} />
-              ))}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-
+        <MagicBentoItem className="md:col-span-6">
+          <div className="p-5">
+            <p className="text-xs font-medium text-foreground mb-4">Priority breakdown</p>
+            <ResponsiveContainer width="100%" height={160}>
+              <BarChart data={priorityData} layout="vertical" margin={{ top: 0, right: 24, left: 12, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" horizontal={false} />
+                <XAxis type="number" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} allowDecimals={false} />
+                <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} width={52} />
+                <Tooltip {...CHART_TOOLTIP_STYLE} />
+                <Bar dataKey="count" radius={[0, 4, 4, 0]}>
+                  {priorityData.map((d) => (
+                    <Cell key={d.name} fill={PRIORITY_PALETTE[d.name as keyof typeof PRIORITY_PALETTE] ?? "#94a3b8"} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </MagicBentoItem>
+      </MagicBento>
     </div>
   )
 }
