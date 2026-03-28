@@ -1,6 +1,4 @@
-import { useState } from "react";
-import { useCreateUser, useSendOtp, useVerifyOtp } from "@/hooks/use-api";
-import type { Role, NotificationPref, ManualMode } from "@/types/api";
+import { MultiStepForm } from "@/components/ui/multistep-form";
 
 // ─── Step data ────────────────────────────────────────────────────────────────
 
@@ -370,109 +368,10 @@ function SuccessState({ name, role, onCreateAnother }: { name: string; role: Rol
 
 // ─── Main page ─────────────────────────────────────────────────────────────────
 
-const TOTAL_STEPS = 4;
-
 export default function Register() {
-  const [step, setStep]       = useState(1);
-  const [phone, setPhone]     = useState("");
-  const [name, setName]       = useState("");
-  const [role, setRole]       = useState<Role>("developer");
-  const [pref, setPref]       = useState<NotificationPref>("all");
-  const [mode, setMode]       = useState<ManualMode>("auto");
-  const [persona, setPersona] = useState("");
-  const [done, setDone]       = useState(false);
-
-  const createUser = useCreateUser();
-
-  function canProceed() {
-    // Step 1 (phone/OTP) advances via its own Verify button — Next is hidden
-    if (step === 2) return name.trim().length > 0;
-    if (step === 3) return true;
-    if (step === 4) return persona.trim().length >= 30;
-    return false;
-  }
-
-  function handleNext() {
-    if (step < TOTAL_STEPS) { setStep(step + 1); return; }
-    createUser.mutate(
-      { name, role, persona_description: persona, notification_pref: pref, phone_no: phone },
-      { onSuccess: () => setDone(true) }
-    );
-  }
-
-  function handleReset() {
-    setStep(1); setPhone(""); setName(""); setRole("developer");
-    setPref("all"); setMode("auto"); setPersona("");
-    setDone(false); createUser.reset();
-  }
-
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <div className="w-full max-w-lg">
-
-        <div className="mb-6">
-          <span className="text-sm font-semibold tracking-tight text-foreground">CogniShift</span>
-          <span className="text-xs text-muted-foreground ml-2">User Registration</span>
-        </div>
-
-        <div className="border border-border rounded-lg bg-card p-6 shadow-sm">
-          {done ? (
-            <SuccessState name={name} role={role} onCreateAnother={handleReset} />
-          ) : (
-            <>
-              {/* Progress */}
-              <div className="flex items-center justify-between mb-6">
-                <StepIndicator current={step} total={TOTAL_STEPS} />
-                <span className="text-[11px] text-muted-foreground font-mono">
-                  Step {step} of {TOTAL_STEPS}
-                </span>
-              </div>
-
-              {/* Step content */}
-              {step === 1 && (
-                <Step1Phone
-                  phone={phone}
-                  setPhone={setPhone}
-                  onVerified={() => setStep(2)}
-                />
-              )}
-              {step === 2 && <Step2 name={name} setName={setName} role={role} setRole={setRole} />}
-              {step === 3 && <Step3 pref={pref} setPref={setPref} mode={mode} setMode={setMode} />}
-              {step === 4 && <Step4 role={role} persona={persona} setPersona={setPersona} />}
-
-              {/* Error from final submit */}
-              {createUser.isError && (
-                <p className="mt-3 text-xs text-red-500">{(createUser.error as Error).message}</p>
-              )}
-
-              {/* Nav footer — hidden on step 1 (OTP has its own action buttons) */}
-              {step > 1 && (
-                <div className="flex justify-between items-center mt-8 pt-4 border-t border-border">
-                  <button
-                    type="button"
-                    onClick={() => setStep(step - 1)}
-                    className="h-8 px-3 border border-border rounded-md text-xs hover:bg-secondary transition-colors"
-                  >
-                    ← Back
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleNext}
-                    disabled={!canProceed() || createUser.isPending}
-                    className="h-8 px-5 bg-primary text-primary-foreground rounded-md text-xs font-medium hover:opacity-90 disabled:opacity-40 transition-all"
-                  >
-                    {createUser.isPending
-                      ? "Creating…"
-                      : step === TOTAL_STEPS
-                      ? "Create Profile"
-                      : "Next →"}
-                  </button>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      </div>
+      <MultiStepForm />
     </div>
   );
 }

@@ -167,3 +167,10 @@ export interface CreateUserRequest {
   notification_pref: NotificationPref;
   phone_no?: string;
 }
+
+export interface LoginVerifyResponse {
+  token: string;
+  user_id: string;
+  name: string;
+  role: Role;
+}

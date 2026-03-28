@@ -8,6 +8,7 @@ import type {
   SetModeRequest, SetModeResponse,
   CreateUserRequest,
   NotificationEvent,
+  LoginVerifyResponse,
 } from "@/types/api";
 
 let baseUrl = "http://127.0.0.1:8000/api";
@@ -80,11 +81,17 @@ export const api = {
   createUser: (body: CreateUserRequest) =>
     postJson<User>("/users/", body),
 
-  // --- OTP auth ---
+  // --- Registration OTP ---
   sendOtp: (body: { phone: string }) =>
     postJson<{ sent: boolean }>("/auth/send-otp/", body),
   verifyOtp: (body: { phone: string; otp: string }) =>
-    postJson<{ verified: boolean; user_exists: boolean; user_id: string | null }>("/auth/verify-otp/", body),
+    postJson<{ verified: boolean }>("/auth/verify-otp/", body),
+
+  // --- Login OTP ---
+  sendLoginOtp: (body: { phone: string }) =>
+    postJson<{ sent: boolean }>("/auth/login/send-otp/", body),
+  loginVerifyOtp: (body: { phone: string; otp: string }) =>
+    postJson<LoginVerifyResponse>("/auth/login/verify-otp/", body),
 
   // --- User-scoped endpoints ---
   setMode: (userId: string, body: SetModeRequest) =>
@@ -95,4 +102,6 @@ export const api = {
     fetchJson<NotificationEvent[]>(`/users/${userId}/queue/`),
   getUserNotifications: (userId: string, status?: string) =>
     fetchJson<NotificationEvent[]>(`/users/${userId}/notifications/${status ? `?status=${status}` : ""}`),
+  getTelegramLink: (userId: string) =>
+    fetchJson<{ link: string; linked: boolean; chat_id: string | null }>(`/users/${userId}/telegram-link/`),
 };

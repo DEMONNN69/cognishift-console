@@ -110,3 +110,22 @@ export function useVerifyOtp() {
     mutationFn: (body: { phone: string; otp: string }) => api.verifyOtp(body),
   });
 }
+
+export function useSendLoginOtp() {
+  return useMutation({ mutationFn: (body: { phone: string }) => api.sendLoginOtp(body) });
+}
+
+export function useLoginVerifyOtp() {
+  return useMutation({
+    mutationFn: (body: { phone: string; otp: string }) => api.loginVerifyOtp(body),
+  });
+}
+
+export function useTelegramLink(userId: string) {
+  return useQuery({
+    queryKey: ["telegram-link", userId],
+    queryFn: () => api.getTelegramLink(userId),
+    enabled: !!userId,
+    refetchInterval: 8000, // poll so the UI updates once user connects via bot
+  });
+}
