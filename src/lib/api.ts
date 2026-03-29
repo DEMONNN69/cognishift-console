@@ -11,7 +11,7 @@ import type {
   LoginVerifyResponse,
 } from "@/types/api";
 
-let baseUrl = "http://127.0.0.1:8000/api";
+let baseUrl = "http://192.168.12.82:8000/api";
 
 export const getApiBaseUrl = () => baseUrl;
 export const setApiBaseUrl = (url: string) => { baseUrl = url; };
@@ -104,6 +104,12 @@ export const api = {
     fetchJson<NotificationEvent[]>(`/users/${userId}/notifications/${status ? `?status=${status}` : ""}`),
   getTelegramLink: (userId: string) =>
     fetchJson<{ link: string; linked: boolean; chat_id: string | null }>(`/users/${userId}/telegram-link/`),
+
+  // --- App session ---
+  setAppSession: (userId: string, body: { app_name: string; app_category: string }) =>
+    postJson<{ id: string; app_name: string; app_category: string; started_at: string; is_active: boolean }>(
+      `/users/${userId}/app-session/`, body
+    ),
 
   // --- Google Calendar ---
   getCalendarAuthUrl: (userId: string) =>

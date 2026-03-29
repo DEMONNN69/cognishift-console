@@ -151,6 +151,17 @@ export function useSummariseNotifications() {
   });
 }
 
+export function useSetAppSession() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ userId, app_name, app_category }: { userId: string; app_name: string; app_category: string }) =>
+      api.setAppSession(userId, { app_name, app_category }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["users"] });
+    },
+  });
+}
+
 export function useCalendarCurrent(userId: string) {
   return useQuery({
     queryKey: ["calendar-current", userId],

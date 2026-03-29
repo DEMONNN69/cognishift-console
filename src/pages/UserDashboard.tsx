@@ -10,7 +10,7 @@ import MagicBento, { MagicBentoItem } from "@/components/MagicBento"
 import { InteractiveMenu, type InteractiveMenuItem } from "@/components/ui/modern-mobile-menu"
 import { getApiBaseUrl } from "@/lib/api"
 import { auth } from "@/lib/auth"
-import { useUsers, useUserNotifications, useSetMode, useTelegramLink, useSummariseNotifications, useCalendarCurrent, SummaryData } from "@/hooks/use-api"
+import { useUsers, useUserNotifications, useSetMode, useTelegramLink, useSummariseNotifications, useCalendarCurrent, useSetAppSession, SummaryData } from "@/hooks/use-api"
 import type { ManualMode } from "@/types/api"
 import type { IconType } from "react-icons"
 import { FaSlack, FaGithub, FaYoutube, FaTelegramPlane, FaChrome } from "react-icons/fa"
@@ -341,6 +341,86 @@ function SummaryModal({ summary, loading, onClose }: { summary: SummaryData | nu
   )
 }
 
+// ─── App Switcher ─────────────────────────────────────────────────────────────
+
+const APP_POOL: { app_name: string; app_category: string; icon?: string }[] = [
+  { app_name: "vscode",   app_category: "productivity",  icon: "SiVisualstudiocode" },
+  { app_name: "notion",   app_category: "productivity"  },
+  { app_name: "figma",    app_category: "productivity"  },
+  { app_name: "excel",    app_category: "productivity",  icon: "SiMicrosoftexcel"   },
+  { app_name: "terminal", app_category: "productivity",  icon: "GoTerminal"         },
+  { app_name: "slack",    app_category: "communication" },
+  { app_name: "zoom",     app_category: "communication" },
+  { app_name: "gmail",    app_category: "communication" },
+  { app_name: "teams",    app_category: "communication", icon: "SiMicrosoftteams"  },
+  { app_name: "discord",  app_category: "communication" },
+  { app_name: "youtube",  app_category: "leisure"       },
+  { app_name: "spotify",  app_category: "leisure"       },
+  { app_name: "reddit",   app_category: "leisure"       },
+  { app_name: "twitter",  app_category: "leisure"       },
+  { app_name: "netflix",  app_category: "leisure"       },
+]
+
+const CATEGORY_COLOR: Record<string, string> = {
+  productivity:  "text-green-400",
+  communication: "text-blue-400",
+  leisure:       "text-purple-400",
+}
+
+function AppSwitcher({ userId, activeApp }: { userId: string; activeApp: string | null }) {
+  const setApp = useSetAppSession()
+
+  return (
+    <div className="rounded-xl border border-border bg-card p-4">
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Active App</p>
+        {activeApp && (
+          <span className="text-[11px] text-muted-foreground">
+            Currently: <span className="text-foreground font-medium capitalize">{activeApp}</span>
+          </span>
+        )}
+      </div>
+      <div className="grid grid-cols-5 gap-1.5">
+        {APP_POOL.map((app) => {
+          const isActive = activeApp === app.app_name
+          return (
+            <button
+              key={app.app_name}
+              type="button"
+              disabled={setApp.isPending}
+              onClick={() => setApp.mutate({ userId, app_name: app.app_name, app_category: app.app_category })}
+              className={cn(
+                "flex flex-col items-center gap-1.5 py-2.5 px-1 rounded-lg border text-center transition-all",
+                "disabled:opacity-40 disabled:cursor-not-allowed",
+                isActive
+                  ? "border-foreground/30 bg-foreground/10"
+                  : "border-border bg-transparent hover:bg-white/5 hover:border-border/80",
+              )}
+            >
+              {app.icon ? (
+                <DynamicIcon
+                  name={app.icon}
+                  className={cn("w-4 h-4", isActive ? CATEGORY_COLOR[app.app_category] : "text-muted-foreground")}
+                  fallback={<span className="w-4 h-4 block" />}
+                />
+              ) : (
+                <AppIcon
+                  app={app.app_name}
+                  className={cn("w-4 h-4", isActive ? CATEGORY_COLOR[app.app_category] : "text-muted-foreground")}
+                  fallback={<span className="w-4 h-4 block" />}
+                />
+              )}
+              <span className={cn("text-[9px] font-medium capitalize leading-tight", isActive ? CATEGORY_COLOR[app.app_category] : "text-muted-foreground")}>
+                {app.app_name}
+              </span>
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 // ─── Home tab ─────────────────────────────────────────────────────────────────
 
 function HomeTab({ userId }: { userId: string }) {
@@ -431,6 +511,10 @@ function HomeTab({ userId }: { userId: string }) {
 
         <MagicBentoItem className="md:col-span-6">
           <ModeSwitcher current={user.manual_mode} onSelect={handleMode} disabled={setMode.isPending} />
+        </MagicBentoItem>
+
+        <MagicBentoItem className="md:col-span-6">
+          <AppSwitcher userId={userId} activeApp={user.active_app?.app_name ?? null} />
         </MagicBentoItem>
 
         <MagicBentoItem className="md:col-span-3 border-yellow-500/20">
