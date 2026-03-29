@@ -102,7 +102,7 @@ export default function PillNav({
 
   return (
     <div
-      className={cn("inline-flex items-center gap-3 px-2 py-1.5 rounded-full", className)}
+      className={cn("inline-flex items-center gap-3 px-4 py-3.5 rounded-full", className)}
       style={{ background: bg }}
     >
       {/* Logo */}
@@ -122,7 +122,7 @@ export default function PillNav({
       )}
 
       {/* Nav items */}
-      <div ref={navRef} className="relative flex items-center">
+      <div ref={navRef} className="relative flex items-center px-64">
         {/* GSAP-animated pill */}
         <div
           ref={pillRef}

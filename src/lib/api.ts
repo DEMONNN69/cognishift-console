@@ -11,7 +11,7 @@ import type {
   LoginVerifyResponse,
 } from "@/types/api";
 
-let baseUrl = "http://192.168.12.82:8000/api";
+let baseUrl = "http://127.0.0.1:8000/api";
 
 export const getApiBaseUrl = () => baseUrl;
 export const setApiBaseUrl = (url: string) => { baseUrl = url; };

@@ -45,7 +45,7 @@ window.addEventListener('message', function (event) {
         payload: {
           user_id: payload.user_id,
           api_base: payload.api_base,
-          monitored_apps: payload.monitored_apps || ['gmail', 'slack', 'github', 'calendar', 'youtube'],
+          monitored_apps: payload.monitored_apps || ['gmail', 'slack', 'github', 'calendar', 'youtube', 'whatsapp'],
         },
       },
       (response) => {

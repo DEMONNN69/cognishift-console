@@ -1,8 +1,8 @@
 // Phase 2 default API config.
-export const API_BASE = "http://127.0.0.1:8000/api";
+export const API_BASE = "http://192.168.12.82:8000/api";
 
 // Maps page hostname → source_app value expected by the backend
-// Accepted values: "slack" | "gmail" | "github" | "calendar" | "youtube"
+// Accepted values: "slack" | "gmail" | "github" | "calendar" | "youtube" | "whatsapp"
 export const SOURCE_APP_MAP = {
   "mail.google.com":     "gmail",
   "app.slack.com":       "slack",
@@ -11,6 +11,7 @@ export const SOURCE_APP_MAP = {
   "calendar.google.com": "calendar",
   "youtube.com":         "youtube",
   "www.youtube.com":     "youtube",
+  "web.whatsapp.com":    "whatsapp",
 };
 
 // Fallback used when hostname doesn't match anything above

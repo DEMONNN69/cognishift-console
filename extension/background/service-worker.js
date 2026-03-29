@@ -6,6 +6,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { API_BASE, SOURCE_APP_MAP, DEFAULT_SOURCE_APP } from '../config.js';
+import { API_BASE, SOURCE_APP_MAP, DEFAULT_SOURCE_APP } from '../config.js';
 
 function resolveSourceApp(hostname) {
   // Strip leading "www." for matching
@@ -15,11 +16,18 @@ function resolveSourceApp(hostname) {
 
 console.log('[CogniShift SW] service-worker.js loaded');
 
+// Apps that should always be present in monitored_apps.
+// Adding a new source here automatically migrates existing stored configs.
+const ALWAYS_MONITORED = ['gmail', 'slack', 'github', 'calendar', 'youtube', 'whatsapp'];
+
 function normalizeMonitoredApps(input) {
   if (!Array.isArray(input) || input.length === 0) {
-    return ['gmail', 'slack', 'github', 'calendar', 'youtube'];
+    return [...ALWAYS_MONITORED];
   }
-  return input.filter((item) => typeof item === 'string' && item.length > 0);
+  const cleaned = input.filter((item) => typeof item === 'string' && item.length > 0);
+  // Migrate: ensure any newly added always-monitored apps are included
+  const merged = [...new Set([...cleaned, ...ALWAYS_MONITORED])];
+  return merged;
 }
 
 async function sendToBackend(source_app, message) {
@@ -29,6 +37,12 @@ async function sendToBackend(source_app, message) {
     const user_id = stored.user_id || null;
     const api_base = stored.api_base || API_BASE;
     const monitoredApps = normalizeMonitoredApps(stored.monitored_apps);
+
+    // Persist migrated list if it grew (e.g. new apps added since last connect)
+    if (Array.isArray(stored.monitored_apps) && monitoredApps.length > stored.monitored_apps.length) {
+      chrome.storage.sync.set({ monitored_apps: monitoredApps });
+      console.log('[CogniShift SW] migrated monitored_apps →', monitoredApps);
+    }
 
     if (!user_id) {
       console.warn('[CogniShift SW] user_id is not configured yet. Open dashboard and use One-click Connect.');

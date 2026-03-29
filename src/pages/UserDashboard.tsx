@@ -10,7 +10,7 @@ import MagicBento, { MagicBentoItem } from "@/components/MagicBento"
 import { InteractiveMenu, type InteractiveMenuItem } from "@/components/ui/modern-mobile-menu"
 import { getApiBaseUrl } from "@/lib/api"
 import { auth } from "@/lib/auth"
-import { useUsers, useUserNotifications, useSetMode, useTelegramLink } from "@/hooks/use-api"
+import { useUsers, useUserNotifications, useSetMode, useTelegramLink, useSummariseNotifications, SummaryData } from "@/hooks/use-api"
 import type { ManualMode } from "@/types/api"
 import type { IconType } from "react-icons"
 import { FaSlack, FaGithub, FaYoutube, FaTelegramPlane, FaChrome } from "react-icons/fa"
@@ -172,6 +172,85 @@ function ModeSwitcher({
   )
 }
 
+// ─── Summary modal ───────────────────────────────────────────────────────────
+
+function SummaryModal({ summary, onClose }: { summary: SummaryData; onClose: () => void }) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-lg rounded-2xl border border-border bg-card shadow-2xl animate-in fade-in zoom-in-95 duration-200 overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-4 border-b border-border/60">
+          <div>
+            <p className="text-[10px] font-semibold tracking-widest uppercase text-violet-400 mb-1">CogniShift AI · Today's Summary</p>
+            <p className="text-sm font-semibold text-foreground leading-snug">{summary.headline}</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="mt-0.5 h-7 w-7 shrink-0 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
+          >
+            ✕
+          </button>
+        </div>
+
+        <div className="px-5 py-4 space-y-4">
+          {/* Stats grid */}
+          {summary.stats.length > 0 && (
+            <div className="grid grid-cols-4 gap-2">
+              {summary.stats.map((s) => (
+                <div
+                  key={s.label}
+                  className="flex flex-col items-center justify-center rounded-xl bg-muted/40 border border-border/60 py-2.5 px-2 gap-0.5"
+                >
+                  <span className="text-xl font-bold text-foreground tabular-nums leading-none">{s.value}</span>
+                  <span className="text-[10px] text-muted-foreground mt-1">{s.label}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Insights */}
+          {summary.insights.length > 0 && (
+            <ul className="space-y-2">
+              {summary.insights.map((insight, i) => (
+                <li key={i} className="flex gap-2 text-sm text-foreground leading-relaxed">
+                  <span className="text-violet-400 shrink-0 mt-0.5">◆</span>
+                  <span>{insight}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {/* Tip */}
+          {summary.tip && (
+            <div className="rounded-xl bg-violet-500/10 border border-violet-500/20 px-3.5 py-2.5 flex gap-2.5 items-start">
+              <span className="shrink-0 mt-0.5">💡</span>
+              <p className="text-xs text-violet-300 leading-relaxed">{summary.tip}</p>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-5 pb-5">
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-full h-9 rounded-xl border border-border bg-background text-xs font-medium text-foreground hover:bg-muted/40 transition-colors"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Home tab ─────────────────────────────────────────────────────────────────
 
 function HomeTab({ userId }: { userId: string }) {
@@ -179,6 +258,8 @@ function HomeTab({ userId }: { userId: string }) {
   const user = users?.find((u) => u.id === userId)
   const { data: notifications } = useUserNotifications(userId)
   const setMode = useSetMode()
+  const summarise = useSummariseNotifications()
+  const [summaryText, setSummaryText] = useState<SummaryData | null>(null)
 
   const delivered = notifications?.filter((n) => n.status === "sent" || n.status === "delivered") ?? []
   const queued    = notifications?.filter((n) => n.status === "queued") ?? []
@@ -192,7 +273,7 @@ function HomeTab({ userId }: { userId: string }) {
     return <div className="flex items-center justify-center py-24 text-sm text-muted-foreground">Loading…</div>
   }
 
-  return (
+  return (<>
     <div className="max-w-6xl mx-auto py-8 px-4 md:px-6">
       <MagicBento
         textAutoHide={true}
@@ -208,31 +289,46 @@ function HomeTab({ userId }: { userId: string }) {
         disableAnimations={false}
       >
         <MagicBentoItem className="md:col-span-4">
-          <div className="p-6 flex items-start justify-between gap-4">
-            <div className="space-y-0.5">
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">Welcome back</p>
-              <h2 className="text-2xl font-semibold tracking-tight">{user.name}</h2>
-              <p className="text-xs text-muted-foreground capitalize">{user.role}</p>
+          <div className="p-6 flex flex-col gap-4 h-full">
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-0.5">
+                <p className="text-xs text-muted-foreground uppercase tracking-wide">Welcome back</p>
+                <h2 className="text-2xl font-semibold tracking-tight">{user.name}</h2>
+                <p className="text-xs text-muted-foreground capitalize">{user.role}</p>
+              </div>
+              <span className={cn("text-xs font-semibold capitalize px-3 py-1 rounded-full border mt-1 shrink-0", {
+                "border-blue-500/30 bg-blue-500/10 text-blue-400": user.manual_mode === "auto",
+                "border-purple-500/30 bg-purple-500/10 text-purple-400": user.manual_mode === "focus",
+                "border-green-500/30 bg-green-500/10 text-green-400": user.manual_mode === "work",
+                "border-yellow-500/30 bg-yellow-500/10 text-yellow-400": user.manual_mode === "meeting",
+                "border-sky-500/30 bg-sky-500/10 text-sky-400": user.manual_mode === "relax",
+                "border-slate-500/30 bg-slate-500/10 text-slate-400": user.manual_mode === "sleep",
+              })}>
+                {user.manual_mode}
+              </span>
             </div>
-            <span className={cn("text-xs font-semibold capitalize px-3 py-1 rounded-full border mt-1", {
-              "border-blue-500/30 bg-blue-500/10 text-blue-400": user.manual_mode === "auto",
-              "border-purple-500/30 bg-purple-500/10 text-purple-400": user.manual_mode === "focus",
-              "border-green-500/30 bg-green-500/10 text-green-400": user.manual_mode === "work",
-              "border-yellow-500/30 bg-yellow-500/10 text-yellow-400": user.manual_mode === "meeting",
-              "border-sky-500/30 bg-sky-500/10 text-sky-400": user.manual_mode === "relax",
-              "border-slate-500/30 bg-slate-500/10 text-slate-400": user.manual_mode === "sleep",
-            })}>
-              {user.manual_mode}
-            </span>
+            <button
+              type="button"
+              disabled={summarise.isPending}
+              onClick={() =>
+                summarise.mutate(userId, {
+                  onSuccess: (d) => setSummaryText(d.summary),
+                  onError: () => setSummaryText({ headline: "Could not generate summary. Please try again.", stats: [], insights: [], tip: "" }),
+                })
+              }
+              className="self-start h-8 px-4 rounded-lg border border-border bg-background text-[11px] font-medium text-foreground hover:bg-muted/40 transition-colors disabled:opacity-50"
+            >
+              {summarise.isPending ? "Generating…" : "✦ Summarise today"}
+            </button>
           </div>
         </MagicBentoItem>
 
         {[
-          { label: "Delivered", value: delivered.length, color: "text-green-400", bg: "bg-green-400/10" },
-          { label: "Queued", value: queued.length, color: "text-yellow-400", bg: "bg-yellow-400/10" },
-          { label: "Blocked", value: blocked.length, color: "text-red-400", bg: "bg-red-400/10" },
-        ].map(({ label, value, color, bg }) => (
-          <MagicBentoItem key={label} className="md:col-span-2">
+          { label: "Delivered", value: delivered.length, color: "text-green-400", bg: "bg-green-400/10", extraClass: "md:row-span-2" },
+          { label: "Queued", value: queued.length, color: "text-yellow-400", bg: "bg-yellow-400/10", extraClass: "" },
+          { label: "Blocked", value: blocked.length, color: "text-red-400", bg: "bg-red-400/10", extraClass: "" },
+        ].map(({ label, value, color, bg, extraClass }) => (
+          <MagicBentoItem key={label} className={cn("md:col-span-2", extraClass)}>
             <div className={cn("h-full p-4 text-center flex flex-col justify-center", bg)}>
               <div className={cn("text-2xl font-semibold", color)}>{value}</div>
               <div className="text-[11px] text-muted-foreground mt-1">{label}</div>
@@ -276,7 +372,7 @@ function HomeTab({ userId }: { userId: string }) {
           </div>
         </MagicBentoItem>
 
-        <MagicBentoItem className="md:col-span-6 border-green-500/20">
+        <MagicBentoItem className="md:col-span-6  border-green-500/20">
           <div className="overflow-hidden">
             <div className="px-5 py-3.5 border-b border-border flex items-center justify-between">
               <p className="text-xs font-medium text-foreground">Recently delivered</p>
@@ -293,7 +389,9 @@ function HomeTab({ userId }: { userId: string }) {
         </MagicBentoItem>
       </MagicBento>
     </div>
-  )
+
+    {summaryText && <SummaryModal summary={summaryText} onClose={() => setSummaryText(null)} />}
+  </>);
 }
 // ─── Connections tab ──────────────────────────────────────────────────────────
 
@@ -724,14 +822,14 @@ type Tab = "home" | "connections" | "dashboard"
 
 const NAV_ITEMS = [
   { label: "Home",        href: "home" },
-  { label: "Connections", href: "connections" },
   { label: "Dashboard",   href: "dashboard" },
+    { label: "Connections", href: "connections" },
 ]
 
 const MOBILE_NAV_ITEMS: InteractiveMenuItem[] = [
   { label: "home", icon: Home },
-  { label: "connections", icon: Link2 },
   { label: "dashboard", icon: BarChart3 },
+    { label: "connections", icon: Link2 },
 ]
 
 export default function UserDashboard() {

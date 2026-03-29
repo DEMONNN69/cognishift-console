@@ -129,3 +129,24 @@ export function useTelegramLink(userId: string) {
     refetchInterval: 8000, // poll so the UI updates once user connects via bot
   });
 }
+
+export interface SummaryData {
+  headline: string
+  stats: Array<{ label: string; value: string }>
+  insights: string[]
+  tip: string
+}
+
+export function useSummariseNotifications() {
+  return useMutation({
+    mutationFn: async (userId: string): Promise<{ summary: SummaryData }> => {
+      const { getApiBaseUrl } = await import("@/lib/api");
+      const res = await fetch(`${getApiBaseUrl()}/users/${userId}/summarise/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      if (!res.ok) throw new Error("Failed to generate summary");
+      return res.json();
+    },
+  });
+}
