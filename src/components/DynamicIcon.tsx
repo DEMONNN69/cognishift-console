@@ -92,6 +92,9 @@ async function resolveIcon(name: string): Promise<ComponentType<IconBaseProps> |
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
+// NOTE: Component functions must NEVER be stored directly in useState because
+// React treats function state as a lazy initializer and calls it, turning the
+// component into a React element. We wrap them in { C } objects instead.
 
 export interface DynamicIconProps extends IconBaseProps {
   /** react-icons export name, e.g. "FaWhatsapp", "SiGmail" */
@@ -101,23 +104,26 @@ export interface DynamicIconProps extends IconBaseProps {
 }
 
 const DynamicIcon = memo(function DynamicIcon({ name, fallback = null, ...props }: DynamicIconProps) {
-  const [Icon, setIcon] = useState<ComponentType<IconBaseProps> | null>(
-    () => iconCache.get(name) ?? null,
-  )
+  const [slot, setSlot] = useState<{ C: ComponentType<IconBaseProps> } | null>(() => {
+    const ic = iconCache.get(name)
+    return ic ? { C: ic } : null
+  })
 
   useEffect(() => {
     if (iconCache.has(name)) {
-      setIcon(iconCache.get(name) ?? null)
+      const ic = iconCache.get(name)!
+      setSlot(ic ? { C: ic } : null)
       return
     }
     let cancelled = false
     resolveIcon(name).then((ic) => {
-      if (!cancelled) setIcon(ic)
+      if (!cancelled) setSlot(ic ? { C: ic } : null)
     })
     return () => { cancelled = true }
   }, [name])
 
-  if (!Icon) return <>{fallback}</>
+  if (!slot) return <>{fallback}</>
+  const { C: Icon } = slot
   return <Icon {...props} />
 })
 
@@ -133,7 +139,7 @@ function pascalCase(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()
 }
 
-// Candidate patterns ordered by likelihood
+// Candidate patterns ordered by likelihood (no spaces — react-icons exports never have spaces)
 const GUESS_TEMPLATES = (p: string): string[] => [
   `Fa${p}`,
   `Si${p}`,
@@ -144,8 +150,6 @@ const GUESS_TEMPLATES = (p: string): string[] => [
   `Md${p}`,
   `Bs${p}`,
   `Io${p}`,
-  `Ti Brand${p}`,
-  `Tb Brand${p}`,
   `Lu${p}`,
   `Hi${p}`,
   `Gi${p}`,
@@ -180,22 +184,25 @@ export interface AppIconProps extends IconBaseProps {
 
 export const AppIcon = memo(function AppIcon({ app, fallback = null, ...props }: AppIconProps) {
   const key = app.toLowerCase()
-  const [Icon, setIcon] = useState<ComponentType<IconBaseProps> | null>(
-    () => appIconCache.get(key) ?? null,
-  )
+  const [slot, setSlot] = useState<{ C: ComponentType<IconBaseProps> } | null>(() => {
+    const ic = appIconCache.get(key)
+    return ic ? { C: ic } : null
+  })
 
   useEffect(() => {
     if (appIconCache.has(key)) {
-      setIcon(appIconCache.get(key) ?? null)
+      const ic = appIconCache.get(key)!
+      setSlot(ic ? { C: ic } : null)
       return
     }
     let cancelled = false
     resolveAppIcon(app).then((ic) => {
-      if (!cancelled) setIcon(ic)
+      if (!cancelled) setSlot(ic ? { C: ic } : null)
     })
     return () => { cancelled = true }
   }, [key, app])
 
-  if (!Icon) return <>{fallback}</>
+  if (!slot) return <>{fallback}</>
+  const { C: Icon } = slot
   return <Icon {...props} />
 })
