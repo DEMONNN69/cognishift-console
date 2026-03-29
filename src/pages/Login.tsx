@@ -22,6 +22,7 @@ export default function Login() {
   function handleSend() {
     setError("")
     if (!phone.trim()) { setError("Enter your phone number first."); return }
+    if (!/^\d{10,15}$/.test(phone.trim())) { setError("Enter a valid phone number (10–15 digits, no spaces or symbols)."); return }
     sendOtp.mutate({ phone: phone.trim() }, {
       onSuccess: () => setOtpSent(true),
       onError: (e) => setError((e as Error).message),
@@ -100,7 +101,12 @@ export default function Login() {
                     className="flex-1 h-10 px-3 border border-border rounded-lg bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-ring disabled:opacity-50"
                     placeholder="+91 9876543210"
                     value={phone}
-                    onChange={(e) => { setPhone(e.target.value); setOtpSent(false); setOtp(""); setError("") }}
+                    onChange={(e) => {
+                      const digits = e.target.value.replaceAll(/\D/g, "").slice(0, 15)
+                      setPhone(digits); setOtpSent(false); setOtp(""); setError("")
+                    }}
+                    inputMode="numeric"
+                    maxLength={15}
                     disabled={sendOtp.isPending}
                     autoFocus
                   />
@@ -129,6 +135,8 @@ export default function Login() {
                       placeholder="• • • • • •"
                       maxLength={6}
                       value={otp}
+                      autoComplete="one-time-code"
+                      inputMode="numeric"
                       onChange={(e) => { setOtp(e.target.value.replaceAll(/\D/g, "")); setError("") }}
                       autoFocus
                     />

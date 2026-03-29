@@ -1,82 +1,85 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // content/interceptor.js  —  runs in ISOLATED world (default)
 //
-// Reads user_id from the page's localStorage (cognishift_user key), syncs it
-// into chrome.storage.local so the service worker can use it — no manual
-// config needed. Also bridges MAIN-world Notification events to the SW.
+// notification-patch.js (MAIN world) patches window.Notification and posts a
+// message. This file lives in the isolated world where chrome.runtime is
+// available, so it acts as the postMessage → chrome.runtime bridge.
 // ─────────────────────────────────────────────────────────────────────────────
 
-console.log('[CogniShift ISOLATED] interceptor.js loaded on', window.location.hostname); // NOSONAR
+console.log('[CogniShift ISOLATED] interceptor.js loaded on', window.location.hostname);
 
-// ── Read user_id from localStorage and sync to chrome.storage.local ──────────
-function syncUserFromLocalStorage(options = {}) {
-  const { emitError = false, logMissing = false } = options;
-  try {
-    const raw = window.localStorage.getItem('cognishift_user'); // NOSONAR
-    if (!raw) {
-      if (logMissing) {
-        console.log('[CogniShift ISOLATED] cognishift_user not found in localStorage');
-      }
-      if (emitError) {
-        document.dispatchEvent(new CustomEvent('cognishift-config-error'));
-      }
-      return false;
-    }
-    const parsed = JSON.parse(raw);
-    const user_id = parsed.user_id;
-    console.log(user_id)
-    if (!user_id) {
-      console.warn('[CogniShift ISOLATED] cognishift_user has no user_id field');
-      if (emitError) {
-        document.dispatchEvent(new CustomEvent('cognishift-config-error'));
-      }
-      return false;
-    }
-    chrome.storage.local.set({ user_id, cognishift_user: raw }, () => {
+window.addEventListener('message', function (event) {
+  // Log every postMessage so we can see if MAIN world is firing at all
+  if (event.data && event.data.type) {
+    console.log('[CogniShift ISOLATED] postMessage received, type:', event.data.type);
+  }
+
+  if (event.source !== window || !event.data) {
+    return;
+  }
+
+  if (event.data.type === 'COGNISHIFT_PING_EXTENSION') {
+    chrome.runtime.sendMessage({ type: 'COGNISHIFT_GET_CONFIG' }, (response) => {
       if (chrome.runtime.lastError) {
-        console.warn('[CogniShift ISOLATED] storage.set error:', chrome.runtime.lastError.message);
-        if (emitError) {
-          document.dispatchEvent(new CustomEvent('cognishift-config-error'));
-        }
-      } else {
-        console.log('[CogniShift ISOLATED] user_id synced from localStorage:', user_id);
-        document.dispatchEvent(new CustomEvent('cognishift-configured', { detail: { user_id } }));
+        window.postMessage({
+          type: 'COGNISHIFT_EXTENSION_PONG',
+          configured: false,
+          error: chrome.runtime.lastError.message,
+        }, '*');
+        return;
       }
+      window.postMessage({
+        type: 'COGNISHIFT_EXTENSION_PONG',
+        configured: Boolean(response?.configured),
+        user_id: response?.user_id || null,
+      }, '*');
     });
-    return true;
-  } catch (e) {
-    console.warn('[CogniShift ISOLATED] failed to read cognishift_user:', e.message);
-    if (emitError) {
-      document.dispatchEvent(new CustomEvent('cognishift-config-error'));
-    }
-    return false;
-  }
-}
-
-// ── Announce presence so the web app can detect the extension ────────────────
-document.dispatchEvent(new CustomEvent('cognishift-ready'));
-
-window.addEventListener('message', function (event) { // NOSONAR
-  if (event.source !== window || !event.data || !event.data.type) return; // NOSONAR
-
-  const { type } = event.data;
-
-  // ── Ping — re-announce and re-sync from localStorage ─────────────────────
-  if (type === '__COGNISHIFT_PING__') {
-    syncUserFromLocalStorage({ emitError: true, logMissing: true });
-    document.dispatchEvent(new CustomEvent('cognishift-ready'));
     return;
   }
 
-  // ── Manual configure click from dashboard ───────────────────────────────
-  if (type === '__COGNISHIFT_CONFIGURE__') {
-    syncUserFromLocalStorage({ emitError: true, logMissing: true });
-    document.dispatchEvent(new CustomEvent('cognishift-ready'));
+  if (event.data.type === 'COGNISHIFT_CONFIGURE_EXTENSION') {
+    const payload = event.data.payload || {};
+    chrome.runtime.sendMessage(
+      {
+        type: 'COGNISHIFT_SAVE_CONFIG',
+        payload: {
+          user_id: payload.user_id,
+          api_base: payload.api_base,
+          monitored_apps: payload.monitored_apps || ['gmail', 'slack', 'github', 'calendar', 'youtube'],
+        },
+      },
+      (response) => {
+        if (chrome.runtime.lastError) {
+          window.postMessage(
+            {
+              type: 'COGNISHIFT_EXTENSION_CONFIG_RESULT',
+              ok: false,
+              error: chrome.runtime.lastError.message,
+            },
+            '*'
+          );
+          return;
+        }
+
+        window.postMessage(
+          {
+            type: 'COGNISHIFT_EXTENSION_CONFIG_RESULT',
+            ok: Boolean(response?.ok),
+            configured: Boolean(response?.configured),
+            error: response?.error || null,
+          },
+          '*'
+        );
+      }
+    );
     return;
   }
 
-  // ── Notification relay (unchanged logic) ─────────────────────────────────
-  if (type !== '__COGNISHIFT_NOTIFICATION__') return;
+  if (
+    event.data.type !== '__COGNISHIFT_NOTIFICATION__'
+  ) {
+    return;
+  }
 
   console.log('[CogniShift ISOLATED] relaying to background SW:', event.data.source, event.data.message);
 
@@ -85,14 +88,16 @@ window.addEventListener('message', function (event) { // NOSONAR
       type: 'COGNISHIFT_NOTIFICATION',
       source: event.data.source,
       message: event.data.message,
-    }, () => {
+    }, (response) => {
       if (chrome.runtime.lastError) {
+        // Extension was reloaded but this tab wasn't refreshed yet — safe to ignore
         console.warn('[CogniShift ISOLATED] sendMessage error (refresh the tab):', chrome.runtime.lastError.message);
       } else {
         console.log('[CogniShift ISOLATED] background SW acknowledged');
       }
     });
   } catch (e) {
+    // Extension context invalidated — tab needs a refresh after extension reload
     console.warn('[CogniShift ISOLATED] context invalidated, refresh this tab:', e.message);
   }
 });

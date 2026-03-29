@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useNavigate } from "react-router-dom"
 import { cn } from "@/lib/utils"
 import { CheckIcon, ArrowRightIcon } from "lucide-react"
 import { useCreateUser, useSendOtp, useVerifyOtp } from "@/hooks/use-api"
@@ -94,6 +95,7 @@ function StepPhone({ phone, setPhone, onVerified }: StepPhoneProps) {
   function handleSend() {
     setError("")
     if (!phone.trim()) { setError("Enter your phone number first."); return }
+    if (!/^\d{10,15}$/.test(phone.trim())) { setError("Enter a valid phone number (10–15 digits, no spaces or symbols)."); return }
     sendOtp.mutate({ phone: phone.trim() }, {
       onSuccess: () => setOtpSent(true),
       onError: (e) => setError((e as Error).message),
@@ -131,14 +133,19 @@ function StepPhone({ phone, setPhone, onVerified }: StepPhoneProps) {
               className="flex-1 h-10 px-3 border border-border rounded-lg bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-ring"
               placeholder="+91 9876543210"
               value={phone}
-              onChange={(e) => { setPhone(e.target.value); setOtpSent(false); setOtp(""); setError("") }}
+              onChange={(e) => {
+                const digits = e.target.value.replace(/\D/g, "").slice(0, 15)
+                setPhone(digits); setOtpSent(false); setOtp(""); setError("")
+              }}
+              inputMode="numeric"
+              maxLength={15}
               disabled={sendOtp.isPending}
               autoFocus
             />
             <button
               type="button"
               onClick={handleSend}
-              disabled={sendOtp.isPending || !phone.trim()}
+              disabled={sendOtp.isPending || phone.trim().length < 10}
               className="h-10 px-4 bg-foreground text-background rounded-lg text-xs font-medium hover:opacity-90 disabled:opacity-40 transition-all shrink-0"
             >
               {getSendLabel()}
@@ -158,6 +165,8 @@ function StepPhone({ phone, setPhone, onVerified }: StepPhoneProps) {
                 maxLength={6}
                 value={otp}
                 onChange={(e) => { setOtp(e.target.value.replaceAll(/\D/g, "")); setError("") }}
+                autoComplete="one-time-code"
+                inputMode="numeric"
                 autoFocus
               />
               <button
@@ -392,7 +401,15 @@ export function MultiStepForm() {
   const [done, setDone]       = useState(false)
 
   const createUser = useCreateUser()
+  const navigate = useNavigate()
   const progress = ((step + 1) / TOTAL) * 100
+
+  useEffect(() => {
+    if (done) {
+      const t = setTimeout(() => navigate("/login"), 2000)
+      return () => clearTimeout(t)
+    }
+  }, [done, navigate])
 
   function canProceed() {
     if (step === 0) return false

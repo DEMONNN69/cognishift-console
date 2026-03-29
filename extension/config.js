@@ -1,9 +1,4 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// config.js — static extension config
-// user_id and api_base are stored in chrome.storage.local (set via the
-// CogniShift dashboard Connections tab) — no hardcoded values needed.
-// ─────────────────────────────────────────────────────────────────────────────
-
+// Phase 2 default API config.
 export const API_BASE = "http://127.0.0.1:8000/api";
 
 // Maps page hostname → source_app value expected by the backend

@@ -8,49 +8,36 @@
 import { API_BASE, SOURCE_APP_MAP, DEFAULT_SOURCE_APP } from '../config.js';
 
 function resolveSourceApp(hostname) {
+  // Strip leading "www." for matching
   const host = hostname.replace(/^www\./, '');
   return SOURCE_APP_MAP[host] || SOURCE_APP_MAP[hostname] || DEFAULT_SOURCE_APP;
 }
 
-console.log('[CogniShift SW] service-worker.js loaded ');
+console.log('[CogniShift SW] service-worker.js loaded');
 
-function resolveUserIdFromStorage(stored) {
-  if (stored?.user_id) return stored.user_id;
-
-  const rawUser = stored?.cognishift_user;
-  if (!rawUser) return null;
-
-  if (typeof rawUser === 'object' && rawUser.user_id) {
-    return rawUser.user_id;
+function normalizeMonitoredApps(input) {
+  if (!Array.isArray(input) || input.length === 0) {
+    return ['gmail', 'slack', 'github', 'calendar', 'youtube'];
   }
-
-  if (typeof rawUser === 'string') {
-    try {
-      const parsed = JSON.parse(rawUser);
-      return parsed?.user_id || null;
-    } catch (_e) {
-      return null;
-    }
-  }
-
-  return null;
+  return input.filter((item) => typeof item === 'string' && item.length > 0);
 }
 
 async function sendToBackend(source_app, message) {
   try {
-    const stored = await chrome.storage.local.get(['user_id', 'cognishift_user', 'api_base']);
-    const user_id = resolveUserIdFromStorage(stored);
+    // Read config from storage (set by one-click dashboard integration)
+    const stored = await chrome.storage.sync.get(['user_id', 'api_base', 'monitored_apps']);
+    const user_id = stored.user_id || null;
+    const api_base = stored.api_base || API_BASE;
+    const monitoredApps = normalizeMonitoredApps(stored.monitored_apps);
 
     if (!user_id) {
-      console.warn('[CogniShift SW] no user_id in storage (checked user_id and cognishift_user.user_id) — open the CogniShift dashboard and click Configure in the Connections tab');
+      console.warn('[CogniShift SW] user_id is not configured yet. Open dashboard and use One-click Connect.');
       return;
     }
 
-    const api_base = stored.api_base || API_BASE;
-
-    // Keep a flat key for faster future lookups.
-    if (!stored.user_id) {
-      chrome.storage.local.set({ user_id });
+    if (!monitoredApps.includes(source_app)) {
+      console.log('[CogniShift SW] source is disabled, skipping:', source_app);
+      return;
     }
 
     console.log('[CogniShift SW] POSTing to', `${api_base}/generate-event/`, { user_id, source_app, message });
@@ -70,10 +57,47 @@ async function sendToBackend(source_app, message) {
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   console.log('[CogniShift SW] message received:', msg.type);
 
+  if (msg.type === 'COGNISHIFT_SAVE_CONFIG') {
+    const payload = msg.payload || {};
+    if (!payload.user_id) {
+      sendResponse({ ok: false, error: 'user_id is required' });
+      return;
+    }
+
+    const update = {
+      user_id: payload.user_id,
+      api_base: payload.api_base || API_BASE,
+      monitored_apps: normalizeMonitoredApps(payload.monitored_apps),
+    };
+
+    chrome.storage.sync.set(update, () => {
+      if (chrome.runtime.lastError) {
+        sendResponse({ ok: false, error: chrome.runtime.lastError.message });
+        return;
+      }
+      console.log('[CogniShift SW] extension config saved:', update);
+      sendResponse({ ok: true, configured: true });
+    });
+    return true;
+  }
+
+  if (msg.type === 'COGNISHIFT_GET_CONFIG') {
+    chrome.storage.sync.get(['user_id', 'api_base', 'monitored_apps'], (stored) => {
+      const user_id = stored.user_id || null;
+      sendResponse({
+        configured: Boolean(user_id),
+        user_id,
+        api_base: stored.api_base || API_BASE,
+        monitored_apps: normalizeMonitoredApps(stored.monitored_apps),
+      });
+    });
+    return true;
+  }
+
   if (msg.type !== 'COGNISHIFT_NOTIFICATION') return;
 
   const source_app = resolveSourceApp(msg.source || '');
-  const message    = (msg.message || '').trim();
+  const message = (msg.message || '').trim();
 
   console.log('[CogniShift SW] resolved source_app:', source_app, '| message:', message);
 

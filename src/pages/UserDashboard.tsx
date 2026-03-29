@@ -3,14 +3,17 @@
 import { useState, useEffect, useRef, useLayoutEffect } from "react"
 import gsap from "gsap"
 import { useNavigate } from "react-router-dom"
+import { Home, Link2, BarChart3 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import PillNav from "@/components/PillNav"
 import MagicBento, { MagicBentoItem } from "@/components/MagicBento"
+import { InteractiveMenu, type InteractiveMenuItem } from "@/components/ui/modern-mobile-menu"
+import { getApiBaseUrl } from "@/lib/api"
 import { auth } from "@/lib/auth"
 import { useUsers, useUserNotifications, useSetMode, useTelegramLink } from "@/hooks/use-api"
 import type { ManualMode } from "@/types/api"
 import type { IconType } from "react-icons"
-import { FaSlack, FaGithub, FaYoutube, FaTelegramPlane, FaPuzzlePiece } from "react-icons/fa"
+import { FaSlack, FaGithub, FaYoutube, FaTelegramPlane, FaChrome } from "react-icons/fa"
 import { SiGmail, SiGooglecalendar } from "react-icons/si"
 import {
   ResponsiveContainer, PieChart, Pie, Cell, Tooltip,
@@ -292,10 +295,10 @@ function HomeTab({ userId }: { userId: string }) {
     </div>
   )
 }
-
 // ─── Connections tab ──────────────────────────────────────────────────────────
 
 const INTEGRATIONS: { id: string; name: string; icon: IconType; description: string }[] = [
+  { id: "browser_extension", name: "Browser Extension", icon: FaChrome,      description: "One-click setup for notification capture" },
   { id: "slack",    name: "Slack",    icon: FaSlack,          description: "Team messages and channel alerts" },
   { id: "gmail",    name: "Gmail",    icon: SiGmail,          description: "Email notifications and threads" },
   { id: "github",   name: "GitHub",   icon: FaGithub,         description: "PRs, issues and CI alerts" },
@@ -365,58 +368,78 @@ function TelegramConnectModal({ link, onClose }: { link: string; onClose: () => 
   )
 }
 
-type ExtState = "detecting" | "not-installed" | "ready" | "configured" | "error"
-
-function useExtension(_userId: string) {
-  const [state, setState] = useState<ExtState>("detecting")
-
-  function configure() {
-    window.postMessage({ type: "__COGNISHIFT_CONFIGURE__" }, window.location.origin)
-  }
-
-  useEffect(() => {
-    let settled = false
-
-    function onReady() {
-      if (settled) return
-      settled = true
-      clearTimeout(fallbackTimer)
-      setState("ready")
-    }
-    function onConfigured() { setState("configured") }
-    function onError()      { setState("error") }
-
-    document.addEventListener("cognishift-ready",        onReady)
-    document.addEventListener("cognishift-configured",   onConfigured)
-    document.addEventListener("cognishift-config-error", onError)
-
-    // Small delay so listeners are registered before the ping fires
-    const pingTimer = setTimeout(() => {
-      window.postMessage({ type: "__COGNISHIFT_PING__" }, window.location.origin)
-    }, 50)
-
-    // Give the extension 1.5 s to reply before marking not-installed
-    const fallbackTimer = setTimeout(() => {
-      if (!settled) setState("not-installed")
-    }, 1500)
-
-    return () => {
-      clearTimeout(pingTimer)
-      clearTimeout(fallbackTimer)
-      document.removeEventListener("cognishift-ready",        onReady)
-      document.removeEventListener("cognishift-configured",   onConfigured)
-      document.removeEventListener("cognishift-config-error", onError)
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  return { state, configure }
-}
-
 function ConnectionsTab({ userId }: { userId: string }) {
   const { data: tg, isLoading: tgLoading } = useTelegramLink(userId)
   const [showModal, setShowModal] = useState(false)
-  const { state: extState, configure } = useExtension(userId)
+  const [extConfigured, setExtConfigured] = useState(false)
+  const [extChecking, setExtChecking] = useState(true)
+  const [extSaving, setExtSaving] = useState(false)
+  const [extError, setExtError] = useState("")
+
+  function pingExtension() {
+    setExtChecking(true)
+
+    const timeoutId = window.setTimeout(() => {
+      setExtChecking(false)
+      setExtConfigured(false)
+    }, 1200)
+
+    const onMessage = (event: MessageEvent) => {
+      if (event.source !== window || !event.data || event.data.type !== "COGNISHIFT_EXTENSION_PONG") {
+        return
+      }
+
+      window.clearTimeout(timeoutId)
+      setExtChecking(false)
+      setExtConfigured(Boolean(event.data.configured))
+      window.removeEventListener("message", onMessage)
+    }
+
+    window.addEventListener("message", onMessage)
+    window.postMessage({ type: "COGNISHIFT_PING_EXTENSION" }, "*")
+  }
+
+  useEffect(() => {
+    pingExtension()
+  }, [])
+
+  function connectExtension() {
+    setExtError("")
+    setExtSaving(true)
+
+    const timeoutId = window.setTimeout(() => {
+      setExtSaving(false)
+      setExtConfigured(false)
+      setExtError("Extension not detected. Reload extension and refresh this page.")
+    }, 1800)
+
+    const onMessage = (event: MessageEvent) => {
+      if (event.source !== window || !event.data || event.data.type !== "COGNISHIFT_EXTENSION_CONFIG_RESULT") {
+        return
+      }
+
+      window.clearTimeout(timeoutId)
+      setExtSaving(false)
+      setExtConfigured(Boolean(event.data.ok && event.data.configured))
+      if (!event.data.ok) {
+        setExtError(event.data.error || "Configuration failed.")
+      }
+      window.removeEventListener("message", onMessage)
+    }
+
+    window.addEventListener("message", onMessage)
+    window.postMessage(
+      {
+        type: "COGNISHIFT_CONFIGURE_EXTENSION",
+        payload: {
+          user_id: userId,
+          api_base: getApiBaseUrl(),
+          monitored_apps: ["gmail", "slack", "github", "calendar", "youtube"],
+        },
+      },
+      "*"
+    )
+  }
 
   return (
     <div className="max-w-2xl mx-auto space-y-6 py-8 px-4">
@@ -428,67 +451,11 @@ function ConnectionsTab({ userId }: { userId: string }) {
       </div>
 
       <div className="space-y-2">
-        {/* ── Browser Extension card ── */}
-        <div className="flex items-center gap-4 rounded-xl border border-border bg-card px-5 py-4">
-          <span className="shrink-0 inline-flex h-10 w-10 items-center justify-center rounded-lg border border-border bg-background text-foreground">
-            <FaPuzzlePiece className="h-5 w-5" />
-          </span>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-foreground">Browser Extension</p>
-            <p className="text-[11px] text-muted-foreground mt-0.5">
-              Captures notifications from Gmail, Slack, GitHub and more
-            </p>
-            {extState === "configured" && (
-              <p className="text-[11px] text-green-400 mt-0.5">
-                Extension is linked to your account ✓
-              </p>
-            )}
-            {extState === "not-installed" && (
-              <p className="text-[11px] text-muted-foreground mt-0.5">
-                Load the extension in Chrome → chrome://extensions → Developer mode → Load unpacked
-              </p>
-            )}
-          </div>
-          <div className="shrink-0">
-            {extState === "detecting" && (
-              <span className="text-[10px] text-muted-foreground">Detecting…</span>
-            )}
-            {extState === "not-installed" && (
-              <span className="text-[10px] font-medium px-2 py-0.5 rounded-full border border-border bg-muted/30 text-muted-foreground">
-                Not installed
-              </span>
-            )}
-            {extState === "configured" && (
-              <span className="text-[10px] font-medium px-2 py-0.5 rounded-full border border-green-500/30 bg-green-500/10 text-green-400">
-                Configured
-              </span>
-            )}
-            {extState === "error" && (
-              <button
-                type="button"
-                onClick={configure}
-                className="h-7 px-3 rounded-lg border border-red-500/30 bg-red-500/10 text-[11px] font-medium text-red-400 hover:opacity-90 transition-opacity"
-              >
-                Configure
-              </button>
-            )}
-            {extState === "ready" && (
-              <button
-                type="button"
-                onClick={configure}
-                className="h-7 px-3 rounded-lg border border-yellow-500/30 bg-yellow-500/10 text-[11px] font-medium text-yellow-400 hover:opacity-90 transition-opacity"
-              >
-                Configure
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* ── Other integrations ── */}
         {INTEGRATIONS.map((app) => {
-          const AppIcon     = app.icon
-          const isTelegram  = app.id === "telegram"
-          const isConnected = isTelegram ? (tg?.linked ?? false) : false
+          const AppIcon = app.icon
+          const isBrowserExtension = app.id === "browser_extension"
+          const isTelegram   = app.id === "telegram"
+          const isConnected  = isTelegram ? (tg?.linked ?? false) : false
 
           return (
             <div
@@ -498,6 +465,7 @@ function ConnectionsTab({ userId }: { userId: string }) {
               <span className="shrink-0 inline-flex h-10 w-10 items-center justify-center rounded-lg border border-border bg-background text-foreground">
                 <AppIcon className="h-5 w-5" />
               </span>
+
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-foreground">{app.name}</p>
                 <p className="text-[11px] text-muted-foreground mt-0.5">{app.description}</p>
@@ -506,9 +474,32 @@ function ConnectionsTab({ userId }: { userId: string }) {
                     Chat ID: {tg.chat_id}
                   </p>
                 )}
+                {isBrowserExtension && (
+                  <p className="text-[11px] text-muted-foreground mt-0.5 font-mono">
+                    user_id: {userId}
+                  </p>
+                )}
               </div>
-              <div className="shrink-0">
-                {isTelegram ? (
+
+              <div className="shrink-0 flex items-center gap-2">
+                {isBrowserExtension ? (
+                  extChecking ? (
+                    <span className="text-[10px] text-muted-foreground">Checking…</span>
+                  ) : extConfigured ? (
+                    <span className="text-[10px] font-medium px-2 py-0.5 rounded-full border border-green-500/30 bg-green-500/10 text-green-400">
+                      Connected
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={connectExtension}
+                      disabled={extSaving}
+                      className="h-7 px-3 rounded-lg border border-border bg-background text-[11px] font-medium text-foreground hover:bg-muted/40 transition-colors disabled:opacity-50"
+                    >
+                      {extSaving ? "Connecting…" : "One-click Connect"}
+                    </button>
+                  )
+                ) : isTelegram ? (
                   tgLoading ? (
                     <span className="text-[10px] text-muted-foreground">Checking…</span>
                   ) : isConnected ? (
@@ -535,13 +526,16 @@ function ConnectionsTab({ userId }: { userId: string }) {
         })}
       </div>
 
+      {extError && (
+        <p className="text-xs text-red-400">{extError}</p>
+      )}
+
       {showModal && tg?.link && (
         <TelegramConnectModal link={tg.link} onClose={() => setShowModal(false)} />
       )}
     </div>
   )
 }
-
 // ─── Chart helpers ────────────────────────────────────────────────────────────
 
 const CHART_TOOLTIP_STYLE = {
@@ -734,6 +728,12 @@ const NAV_ITEMS = [
   { label: "Dashboard",   href: "dashboard" },
 ]
 
+const MOBILE_NAV_ITEMS: InteractiveMenuItem[] = [
+  { label: "home", icon: Home },
+  { label: "connections", icon: Link2 },
+  { label: "dashboard", icon: BarChart3 },
+]
+
 export default function UserDashboard() {
   const navigate  = useNavigate()
   const user      = auth.getUser()
@@ -756,7 +756,7 @@ export default function UserDashboard() {
   return (
     <div className="min-h-screen bg-background">
       {/* Floating navbar */}
-      <div className="fixed top-4 left-1/2 -translate-x-1/2 z-40 w-full max-w-5xl px-4">
+      <div className="fixed top-4 left-1/2 -translate-x-1/2 z-40 w-full max-w-5xl px-4 hidden md:block">
         <div className="flex justify-center overflow-x-auto">
           <PillNav
             brandText="Cognishift"
@@ -774,8 +774,23 @@ export default function UserDashboard() {
         </div>
       </div>
 
+      {/* Mobile navbar */}
+      <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 w-full px-4 md:hidden">
+        <div className="flex justify-center">
+          <InteractiveMenu
+            items={MOBILE_NAV_ITEMS}
+            activeIndex={Math.max(0, NAV_ITEMS.findIndex((item) => item.href === tab))}
+            onItemSelect={(_, index) => {
+              const next = NAV_ITEMS[index]
+              if (next) setTab(next.href as Tab)
+            }}
+            accentColor="hsl(var(--foreground))"
+          />
+        </div>
+      </div>
+
       {/* Tab content */}
-      <div className="pt-24">
+      <div className="pt-6 md:pt-24 pb-24 md:pb-8">
         {tab === "home"        && <HomeTab        userId={user.user_id} />}
         {tab === "connections" && <ConnectionsTab userId={user.user_id} />}
         {tab === "dashboard"   && <DashboardTab   userId={user.user_id} />}
