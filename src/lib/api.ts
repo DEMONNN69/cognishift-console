@@ -104,4 +104,10 @@ export const api = {
     fetchJson<NotificationEvent[]>(`/users/${userId}/notifications/${status ? `?status=${status}` : ""}`),
   getTelegramLink: (userId: string) =>
     fetchJson<{ link: string; linked: boolean; chat_id: string | null }>(`/users/${userId}/telegram-link/`),
+
+  // --- Google Calendar ---
+  getCalendarAuthUrl: (userId: string) =>
+    fetchJson<{ auth_url: string }>(`/auth/google/${userId}/init/`),
+  getCalendarCurrent: (userId: string) =>
+    fetchJson<{ connected: boolean; event: { current_event: string; type: string } | null }>(`/users/${userId}/calendar/current/`),
 };

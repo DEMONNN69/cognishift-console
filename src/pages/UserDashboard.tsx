@@ -10,7 +10,7 @@ import MagicBento, { MagicBentoItem } from "@/components/MagicBento"
 import { InteractiveMenu, type InteractiveMenuItem } from "@/components/ui/modern-mobile-menu"
 import { getApiBaseUrl } from "@/lib/api"
 import { auth } from "@/lib/auth"
-import { useUsers, useUserNotifications, useSetMode, useTelegramLink, useSummariseNotifications, SummaryData } from "@/hooks/use-api"
+import { useUsers, useUserNotifications, useSetMode, useTelegramLink, useSummariseNotifications, useCalendarCurrent, SummaryData } from "@/hooks/use-api"
 import type { ManualMode } from "@/types/api"
 import type { IconType } from "react-icons"
 import { FaSlack, FaGithub, FaYoutube, FaTelegramPlane, FaChrome } from "react-icons/fa"
@@ -567,11 +567,32 @@ function TelegramConnectModal({ link, onClose }: { link: string; onClose: () => 
 
 function ConnectionsTab({ userId }: { userId: string }) {
   const { data: tg, isLoading: tgLoading } = useTelegramLink(userId)
+  const { data: cal, isLoading: calLoading } = useCalendarCurrent(userId)
   const [showModal, setShowModal] = useState(false)
   const [extConfigured, setExtConfigured] = useState(false)
   const [extChecking, setExtChecking] = useState(true)
   const [extSaving, setExtSaving] = useState(false)
   const [extError, setExtError] = useState("")
+  const [calConnecting, setCalConnecting] = useState(false)
+
+  // Show a toast if returning from Google OAuth
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get("calendar_connected") === "true") {
+      window.history.replaceState({}, "", window.location.pathname)
+    }
+  }, [])
+
+  async function connectGoogleCalendar() {
+    setCalConnecting(true)
+    try {
+      const { api } = await import("@/lib/api")
+      const { auth_url } = await api.getCalendarAuthUrl(userId)
+      window.location.href = auth_url
+    } catch {
+      setCalConnecting(false)
+    }
+  }
 
   function pingExtension() {
     setExtChecking(true)
@@ -652,7 +673,10 @@ function ConnectionsTab({ userId }: { userId: string }) {
           const AppIcon = app.icon
           const isBrowserExtension = app.id === "browser_extension"
           const isTelegram   = app.id === "telegram"
-          const isConnected  = isTelegram ? (tg?.linked ?? false) : false
+          const isCalendar   = app.id === "calendar"
+          const isConnected  = isTelegram ? (tg?.linked ?? false)
+                             : isCalendar ? (cal?.connected ?? false)
+                             : false
 
           return (
             <div
@@ -669,6 +693,11 @@ function ConnectionsTab({ userId }: { userId: string }) {
                 {isTelegram && isConnected && tg?.chat_id && (
                   <p className="text-[11px] text-muted-foreground mt-0.5 font-mono">
                     Chat ID: {tg.chat_id}
+                  </p>
+                )}
+                {isCalendar && isConnected && cal?.event && (
+                  <p className="text-[11px] text-green-400 mt-0.5">
+                    Now: {cal.event.current_event}
                   </p>
                 )}
                 {isBrowserExtension && (
@@ -710,6 +739,23 @@ function ConnectionsTab({ userId }: { userId: string }) {
                       className="h-7 px-3 rounded-lg border border-border bg-background text-[11px] font-medium text-foreground hover:bg-muted/40 transition-colors"
                     >
                       Connect →
+                    </button>
+                  )
+                ) : isCalendar ? (
+                  calLoading ? (
+                    <span className="text-[10px] text-muted-foreground">Checking…</span>
+                  ) : isConnected ? (
+                    <span className="text-[10px] font-medium px-2 py-0.5 rounded-full border border-green-500/30 bg-green-500/10 text-green-400">
+                      Connected
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={connectGoogleCalendar}
+                      disabled={calConnecting}
+                      className="h-7 px-3 rounded-lg border border-border bg-background text-[11px] font-medium text-foreground hover:bg-muted/40 transition-colors disabled:opacity-50"
+                    >
+                      {calConnecting ? "Redirecting…" : "Connect →"}
                     </button>
                   )
                 ) : (

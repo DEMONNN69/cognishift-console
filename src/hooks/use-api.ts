@@ -150,3 +150,12 @@ export function useSummariseNotifications() {
     },
   });
 }
+
+export function useCalendarCurrent(userId: string) {
+  return useQuery({
+    queryKey: ["calendar-current", userId],
+    queryFn: () => api.getCalendarCurrent(userId),
+    enabled: !!userId,
+    refetchInterval: 60_000, // refresh every minute
+  });
+}
